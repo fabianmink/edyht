@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2014-2017 Fabian Mink <fabian.mink@mink-ing.de>
+  Copyright (c) 2014-2020 Fabian Mink <fabian.mink@mink-ing.de>
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
@@ -47,24 +47,21 @@
 #include "edyht.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "pulse_main.h"
 
 
 //Generate file.*i by "xxd -i infile.* outfile.*i"
 #include "htdocs/index.htmi"
 #include "htdocs/err404.htmi"
 #include "htdocs/credits.htmi"
-#include "htdocs/testform.htmi"
+#include "htdocs/testform_begin.htmi"
+#include "htdocs/testform_end.htmi"
 #include "htdocs/tasks_begin.htmi"
 #include "htdocs/tasks_end.htmi"
 #include "htdocs/lwip_begin.htmi"
 #include "htdocs/lwip_end.htmi"
-#include "htdocs/setup_begin.htmi"
-#include "htdocs/setup_end.htmi"
-#include "htdocs/favicon.pngi"
 
 static void page_FreeRTOS_Tasks(struct netconn *conn);
-static void page_LwIP_Info(struct netconn *conn);
+//static void page_LwIP_Info(struct netconn *conn);
 
 #define EDYHT_PRIO    ( tskIDLE_PRIORITY + 3 )
 
@@ -116,6 +113,21 @@ static const unsigned char http_content_png[] = {
 };
 static const unsigned int http_content_png_len = 27;
 
+/* "Content-type: application/json */
+static const unsigned char http_content_json[] = {
+		0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x2d, 0x74, 0x79, 0x70, 0x65,
+		0x3a, 0x20, 0x61, 0x70, 0x70, 0x6c, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6F,
+		0x6e, 0x2f, 0x6a, 0x73, 0x6f, 0x6e, 0x0d, 0x0a, 0x0d, 0x0a
+};
+static const unsigned int http_content_json_len = 34;
+
+/* "Content-type: text/javascript */
+static const unsigned char http_content_js[] = {
+		0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x2d, 0x74, 0x79, 0x70, 0x65,
+		0x3a, 0x20, 0x74, 0x65, 0x78, 0x74, 0x2f, 0x6a, 0x61, 0x76, 0x61, 0x73,
+		0x63, 0x72, 0x69, 0x70, 0x74, 0x0d,	0x0a, 0x0d, 0x0a
+};
+static const unsigned int http_content_js_len = 33;
 
 #define ENTRY_LEN   12
 #define LIST_LEN    10
@@ -171,13 +183,11 @@ static inline int charProcess(char inChar){
 		case urlState_filename:
 			if(inChar == ' '){
 				//Space detected -> end completely
-				//if(cntChar < ENTRY_LEN)
 				filename[cntChar] = '\0';
 				return CHARPROC_FINISHED;
 			}
 			if(inChar == '?'){
 				//Query detected -> go Query
-				//if(cntChar < ENTRY_LEN)
 				filename[cntChar] = '\0';
 				cntChar = 0;
 				urlState = urlState_queryName;
@@ -199,7 +209,6 @@ static inline int charProcess(char inChar){
 			if(cntElements >= LIST_LEN) return CHARPROC_ERR_OWFL;
 			if(inChar == '='){
 				//Value detected -> go value
-				//if(cntChar < ENTRY_LEN)
 				queryList[cntElements].name[cntChar] = '\0';
 				cntChar = 0;
 				urlState = urlState_queryVal;
@@ -220,14 +229,12 @@ static inline int charProcess(char inChar){
 		case urlState_queryVal:
 			if(inChar == ' '){
 				//Space detected -> end completely
-				//if(cntChar < ENTRY_LEN)
 				queryList[cntElements].value[cntChar] = '\0';
 				cntElements++;
 				return CHARPROC_FINISHED;
 			}
 			if(inChar == '&'){
 				//Next token detected -> go Name
-				//if(cntChar < ENTRY_LEN)
 				queryList[cntElements].value[cntChar] = '\0';
 				cntChar = 0;
 				cntElements++;
@@ -256,37 +263,52 @@ static inline int charProcess(char inChar){
 	return(CHARPROC_OK);
 }
 
+static int array[1000];
+static void arrayProcess(struct netconn *conn){
+	char val[20];
+	memset(val, 0,20);
 
-//static void queryShow(struct netconn *conn){
-//
-//	char line[100];
-//	memset(line, 0,100);
-//	char table[1000];
-//	memset(table, 0,1000);
-//
-//	strcat(table, "<table>\n");
-//
-//	int i;
-//	for(i=0;i<elecnt;i++){
-//		sprintf(line, "<tr><td>%s <td>%s\n", queryList[i].name, queryList[i].value);
-//		strcat(table, line);
-//	}
-//	strcat(table, "</table>\n");
-//	netconn_write(conn, table, strlen(table), NETCONN_COPY);
-//}
+	for(int pos = 0; pos<1000; pos++){
+		array[pos] = pos/2 + 1 + pos/3; //fill some "random" data to array
+		if(pos == 0){
+			sprintf(val, "%d", array[pos]);
+		}
+		else{
+			sprintf(val, ",%d", array[pos]);
+		}
+		netconn_write(conn, val, strlen(val), NETCONN_COPY);
+	}
+}
+
+static void queryShow(struct netconn *conn){
+
+	char line[200];
+	memset(line, 0,200);
+
+	sprintf(line, "Number of elements: %d\n", cntElements);
+	netconn_write(conn, line, strlen(line), NETCONN_COPY);
+
+	sprintf(line, "<table>\n");
+	netconn_write(conn, line, strlen(line), NETCONN_COPY);
+
+	int i;
+	for(i=0;i<cntElements;i++){
+		sprintf(line, "<tr><td>%s <td>%s\n", queryList[i].name, queryList[i].value);
+		netconn_write(conn, line, strlen(line), NETCONN_COPY);
+	}
+	sprintf(line, "</table>\n");
+	netconn_write(conn, line, strlen(line), NETCONN_COPY);
+}
 
 static float p1234val;
 static void queryDecode(void){
-
 	int i;
 	for(i=0;i<cntElements;i++){
 		//Decode value for query string element "1234.3"
 		if(strncmp(queryList[i].name, "1234.3", ENTRY_LEN) == 0){
 			p1234val = strtof(queryList[i].value, NULL);
 		}
-
 	}
-
 }
 
 static inline void webpageProcess(struct netconn *conn){
@@ -323,7 +345,7 @@ static inline void webpageProcess(struct netconn *conn){
 		netconn_write(conn, http_content_html, http_content_html_len, NETCONN_NOCOPY);
 		netconn_write(conn, htdocs_lwip_begin_htm, htdocs_lwip_begin_htm_len, NETCONN_NOCOPY);
 		/* Load dynamic page part */
-		page_LwIP_Info(conn);
+		//page_LwIP_Info(conn);
 		netconn_write(conn, htdocs_lwip_end_htm, htdocs_lwip_end_htm_len, NETCONN_NOCOPY);
 	}
 	else if(strncmp(filename, "testform.htm", ENTRY_LEN) == 0)
@@ -331,23 +353,36 @@ static inline void webpageProcess(struct netconn *conn){
 		netconn_write(conn, http_200ok, http_200ok_len, NETCONN_NOCOPY);
 		netconn_write(conn, http_server, http_server_len, NETCONN_NOCOPY);
 		netconn_write(conn, http_content_html, http_content_html_len, NETCONN_NOCOPY);
-		netconn_write(conn, htdocs_testform_htm, htdocs_testform_htm_len, NETCONN_NOCOPY);
-		//queryShow(conn);
-		queryDecode();
+		netconn_write(conn, htdocs_testform_begin_htm, htdocs_testform_begin_htm_len, NETCONN_NOCOPY);
+		queryShow(conn);
+		//queryDecode();
 		//char xxcnt[100];
 		//MAY USE MALLOC!!!
 		//sprintf(xxcnt, "%f\n", p1234val);
 		//snprintf ( xxcnt, 100, "%f\n", p1234val );
 		//ftoa_own(xxcnt, p1234val);
 		//netconn_write(conn, xxcnt, strlen(xxcnt), NETCONN_COPY);
+		netconn_write(conn, htdocs_testform_end_htm, htdocs_testform_end_htm_len, NETCONN_NOCOPY);
 	}
-	else if(strncmp(filename, "favicon.png", ENTRY_LEN) == 0)
+	else if(strncmp(filename, "test.json", ENTRY_LEN) == 0)
 	{
 		netconn_write(conn, http_200ok, http_200ok_len, NETCONN_NOCOPY);
 		netconn_write(conn, http_server, http_server_len, NETCONN_NOCOPY);
-		netconn_write(conn, http_content_png, http_content_png_len, NETCONN_NOCOPY);
-		netconn_write(conn, htdocs_favicon_png, htdocs_favicon_png_len, NETCONN_NOCOPY);
+		netconn_write(conn, http_content_json, http_content_json_len, NETCONN_NOCOPY);
+		char *begin_json_array = "{\n\"val\":[";
+		netconn_write(conn, begin_json_array, strlen(begin_json_array), NETCONN_NOCOPY);
+		arrayProcess(conn);
+		char *end_json_array = "]\n}";
+		netconn_write(conn, end_json_array, strlen(end_json_array), NETCONN_NOCOPY);
+
 	}
+	//	else if(strncmp(filename, "favicon.png", ENTRY_LEN) == 0)
+	//	{
+	//		netconn_write(conn, http_200ok, http_200ok_len, NETCONN_NOCOPY);
+	//		netconn_write(conn, http_server, http_server_len, NETCONN_NOCOPY);
+	//		netconn_write(conn, http_content_png, http_content_png_len, NETCONN_NOCOPY);
+	//		netconn_write(conn, htdocs_favicon_png, htdocs_favicon_png_len, NETCONN_NOCOPY);
+	//	}
 	else
 	{
 		/* Show error page */
@@ -369,7 +404,7 @@ static void serve_get_request(struct netconn *conn)
 	char myChar;
 
 	//Set timeout
-	netconn_set_recvtimeout ( conn, 10000 );
+	netconn_set_recvtimeout ( conn, 2000 );
 
 	charProcessInit();
 
@@ -468,7 +503,7 @@ static void edyht_thread(void *arg)
 
 void edyht_init()
 {
-	sys_thread_new("edyht", edyht_thread, NULL, 1200, EDYHT_PRIO);
+	sys_thread_new("edyht", edyht_thread, NULL, 2500, EDYHT_PRIO);
 }
 
 static void page_FreeRTOS_Tasks(struct netconn *conn)
@@ -482,7 +517,8 @@ static void page_FreeRTOS_Tasks(struct netconn *conn)
 
 	//Create Task List
 	memset(buffer, 0,1000);
-	vTaskList((signed char *)(buffer));
+	vTaskList(buffer);
+	//vTaskGetRunTimeStats(buffer);
 	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
 
 	netconn_write(conn, "------------------------------------------\r\n", 44, NETCONN_COPY);
@@ -496,108 +532,108 @@ static void page_FreeRTOS_Tasks(struct netconn *conn)
 	netconn_write(conn, "</pre>\r\n", 8, NETCONN_COPY);
 }
 
-void lwip_display_toString(struct stats_proto *proto, const char *name, char* string)
-{
-	char tmp[100];
-	sprintf(string, "\n%s\n\t", name);
-	sprintf(tmp, "xmit: %d\n\t", proto->xmit);
-	strcat(string, tmp);
-	sprintf(tmp, "recv: %d\n\t", proto->recv);
-	strcat(string, tmp);
-	sprintf(tmp, "fw: %d\n\t", proto->fw);
-	strcat(string, tmp);
-	sprintf(tmp, "drop: %d\n\t", proto->drop);
-	strcat(string, tmp);
-	sprintf(tmp, "chkerr: %d\n\t", proto->chkerr);
-	strcat(string, tmp);
-	sprintf(tmp, "lenerr: %d\n\t", proto->lenerr);
-	strcat(string, tmp);
-	sprintf(tmp, "memerr: %d\n\t", proto->memerr);
-	strcat(string, tmp);
-	sprintf(tmp, "rterr: %d\n\t", proto->rterr);
-	strcat(string, tmp);
-	sprintf(tmp, "proterr: %d\n\t", proto->proterr);
-	strcat(string, tmp);
-	sprintf(tmp, "opterr: %d\n\t", proto->opterr);
-	strcat(string, tmp);
-	sprintf(tmp, "err: %d\n\t", proto->err);
-	strcat(string, tmp);
-	sprintf(tmp, "cachehit: %d\n", proto->cachehit);
-	strcat(string, tmp);
-}
-
-static void lwip_display_mem_toString(struct stats_mem *mem, const char *name, char* string)
-{
-	char tmp[100];
-	sprintf(string, "\nMEM %s\n\t", name);
-	sprintf(tmp, "avail: %lu\n\t", (u32_t)mem->avail);
-	strcat(string, tmp);
-	sprintf(tmp, "used: %lu\n\t", (u32_t)mem->used);
-	strcat(string, tmp);
-	sprintf(tmp, "max: %lu\n\t", (u32_t)mem->max);
-	strcat(string, tmp);
-	sprintf(tmp, "err: %lu\n", (u32_t)mem->err);
-	strcat(string, tmp);
-}
-
-static void lwip_display_sys_toString(struct stats_sys *sys, char* string)
-{
-	char tmp[100];
-	sprintf(string, "\nSYS\n\t");
-	sprintf(tmp, "sem.used:  %lu\n\t", (u32_t)sys->sem.used);
-	strcat(string, tmp);
-	sprintf(tmp, "sem.max:   %lu\n\t", (u32_t)sys->sem.max);
-	strcat(string, tmp);
-	sprintf(tmp, "sem.err:   %lu\n\t", (u32_t)sys->sem.err);
-	strcat(string, tmp);
-	sprintf(tmp, "mutex.used: %lu\n\t", (u32_t)sys->mutex.used);
-	strcat(string, tmp);
-	sprintf(tmp, "mutex.max:  %lu\n\t", (u32_t)sys->mutex.max);
-	strcat(string, tmp);
-	sprintf(tmp, "mutex.err:  %lu\n\t", (u32_t)sys->mutex.err);
-	strcat(string, tmp);
-	sprintf(tmp, "mbox.used:  %lu\n\t", (u32_t)sys->mbox.used);
-	strcat(string, tmp);
-	sprintf(tmp, "mbox.max:   %lu\n\t", (u32_t)sys->mbox.max);
-	strcat(string, tmp);
-	sprintf(tmp, "mbox.err:   %lu\n\t", (u32_t)sys->mbox.err);
-	strcat(string, tmp);
-}
-
-
-static void page_LwIP_Info(struct netconn *conn)
-{
-	portCHAR buffer[1000];
-
-	netconn_write(conn, "<pre>\r\n",7,NETCONN_COPY);
-	netconn_write(conn, "Test lwIP Stats:                          \r\n", 44, NETCONN_COPY);
-	netconn_write(conn, "------------------------------------------\r\n", 44, NETCONN_COPY);
-
-	memset(buffer, 0,1000);
-
-	lwip_display_toString(&lwip_stats.link, "LINK", buffer);
-	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
-
-	lwip_display_toString(&lwip_stats.ip, "IP", buffer);
-	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
-
-	lwip_display_toString(&lwip_stats.icmp, "ICMP", buffer);
-	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
-
-	lwip_display_toString(&lwip_stats.tcp, "TCP", buffer);
-	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
-
-	lwip_display_toString(&lwip_stats.udp, "UDP", buffer);
-	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
-
-	lwip_display_toString(&lwip_stats.etharp, "ETHARP", buffer);
-	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
-
-	lwip_display_mem_toString(&lwip_stats.mem, "HEAP", buffer);
-	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
-
-	lwip_display_sys_toString(&lwip_stats.sys, buffer);
-	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
-
-	netconn_write(conn, "</pre>\r\n", 8, NETCONN_COPY);
-}
+//void lwip_display_toString(struct stats_proto *proto, const char *name, char* string)
+//{
+//	char tmp[100];
+//	sprintf(string, "\n%s\n\t", name);
+//	sprintf(tmp, "xmit: %d\n\t", proto->xmit);
+//	strcat(string, tmp);
+//	sprintf(tmp, "recv: %d\n\t", proto->recv);
+//	strcat(string, tmp);
+//	sprintf(tmp, "fw: %d\n\t", proto->fw);
+//	strcat(string, tmp);
+//	sprintf(tmp, "drop: %d\n\t", proto->drop);
+//	strcat(string, tmp);
+//	sprintf(tmp, "chkerr: %d\n\t", proto->chkerr);
+//	strcat(string, tmp);
+//	sprintf(tmp, "lenerr: %d\n\t", proto->lenerr);
+//	strcat(string, tmp);
+//	sprintf(tmp, "memerr: %d\n\t", proto->memerr);
+//	strcat(string, tmp);
+//	sprintf(tmp, "rterr: %d\n\t", proto->rterr);
+//	strcat(string, tmp);
+//	sprintf(tmp, "proterr: %d\n\t", proto->proterr);
+//	strcat(string, tmp);
+//	sprintf(tmp, "opterr: %d\n\t", proto->opterr);
+//	strcat(string, tmp);
+//	sprintf(tmp, "err: %d\n\t", proto->err);
+//	strcat(string, tmp);
+//	sprintf(tmp, "cachehit: %d\n", proto->cachehit);
+//	strcat(string, tmp);
+//}
+//
+//static void lwip_display_mem_toString(struct stats_mem *mem, const char *name, char* string)
+//{
+//	char tmp[100];
+//	sprintf(string, "\nMEM %s\n\t", name);
+//	sprintf(tmp, "avail: %lu\n\t", (u32_t)mem->avail);
+//	strcat(string, tmp);
+//	sprintf(tmp, "used: %lu\n\t", (u32_t)mem->used);
+//	strcat(string, tmp);
+//	sprintf(tmp, "max: %lu\n\t", (u32_t)mem->max);
+//	strcat(string, tmp);
+//	sprintf(tmp, "err: %lu\n", (u32_t)mem->err);
+//	strcat(string, tmp);
+//}
+//
+//static void lwip_display_sys_toString(struct stats_sys *sys, char* string)
+//{
+//	char tmp[100];
+//	sprintf(string, "\nSYS\n\t");
+//	sprintf(tmp, "sem.used:  %lu\n\t", (u32_t)sys->sem.used);
+//	strcat(string, tmp);
+//	sprintf(tmp, "sem.max:   %lu\n\t", (u32_t)sys->sem.max);
+//	strcat(string, tmp);
+//	sprintf(tmp, "sem.err:   %lu\n\t", (u32_t)sys->sem.err);
+//	strcat(string, tmp);
+//	sprintf(tmp, "mutex.used: %lu\n\t", (u32_t)sys->mutex.used);
+//	strcat(string, tmp);
+//	sprintf(tmp, "mutex.max:  %lu\n\t", (u32_t)sys->mutex.max);
+//	strcat(string, tmp);
+//	sprintf(tmp, "mutex.err:  %lu\n\t", (u32_t)sys->mutex.err);
+//	strcat(string, tmp);
+//	sprintf(tmp, "mbox.used:  %lu\n\t", (u32_t)sys->mbox.used);
+//	strcat(string, tmp);
+//	sprintf(tmp, "mbox.max:   %lu\n\t", (u32_t)sys->mbox.max);
+//	strcat(string, tmp);
+//	sprintf(tmp, "mbox.err:   %lu\n\t", (u32_t)sys->mbox.err);
+//	strcat(string, tmp);
+//}
+//
+//
+//static void page_LwIP_Info(struct netconn *conn)
+//{
+//	portCHAR buffer[1000];
+//
+//	netconn_write(conn, "<pre>\r\n",7,NETCONN_COPY);
+//	netconn_write(conn, "Test lwIP Stats:                          \r\n", 44, NETCONN_COPY);
+//	netconn_write(conn, "------------------------------------------\r\n", 44, NETCONN_COPY);
+//
+//	memset(buffer, 0,1000);
+//
+//	lwip_display_toString(&lwip_stats.link, "LINK", buffer);
+//	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
+//
+//	lwip_display_toString(&lwip_stats.ip, "IP", buffer);
+//	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
+//
+//	lwip_display_toString(&lwip_stats.icmp, "ICMP", buffer);
+//	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
+//
+//	lwip_display_toString(&lwip_stats.tcp, "TCP", buffer);
+//	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
+//
+//	lwip_display_toString(&lwip_stats.udp, "UDP", buffer);
+//	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
+//
+//	lwip_display_toString(&lwip_stats.etharp, "ETHARP", buffer);
+//	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
+//
+//	lwip_display_mem_toString(&lwip_stats.mem, "HEAP", buffer);
+//	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
+//
+//	lwip_display_sys_toString(&lwip_stats.sys, buffer);
+//	netconn_write(conn, buffer, strlen(buffer), NETCONN_COPY);
+//
+//	netconn_write(conn, "</pre>\r\n", 8, NETCONN_COPY);
+//}
