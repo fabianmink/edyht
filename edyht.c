@@ -72,6 +72,20 @@ static const unsigned char http_200ok[] = {
 };
 static const unsigned int http_200ok_len = 17;
 
+/* HTTP/1.0 202 Accepted */
+static const unsigned char http_202acc[] = {
+		0x48,0x54,0x54,0x50,0x2f,0x31,0x2e,0x30,0x20,0x32,0x30,0x32,0x20,0x41,
+		0x63,0x63,0x65,0x70,0x74,0x65,0x64,0x0d,0x0a
+};
+static const unsigned int http_202acc_len = 23;
+
+/* HTTP/1.0 400 Bad Request */
+static const unsigned char http_400bad[] = {
+		0x48,0x54,0x54,0x50,0x2f,0x31,0x2e,0x30,0x20,0x34,0x30,0x30,0x20,0x42,
+		0x61,0x64,0x20,0x52,0x65,0x71,0x75,0x65,0x73,0x74,0x0d,0x0a
+};
+static const unsigned int http_400bad_len = 26;
+
 /* HTTP/1.0 404 File not found */
 static const unsigned char http_404fnf[] = {
 		0x48, 0x54, 0x54, 0x50, 0x2f, 0x31, 0x2e, 0x30, 0x20, 0x34, 0x30, 0x34,
@@ -80,14 +94,13 @@ static const unsigned char http_404fnf[] = {
 };
 static const unsigned int http_404fnf_len = 29;
 
-/* Server: edyht - based on lwIP 1.4.1 */
+/* Server: edyht - based on lwIP */
 static const unsigned char http_server[] = {
 		0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x3a, 0x20, 0x65, 0x64, 0x79, 0x68,
 		0x74, 0x20, 0x2d, 0x20, 0x62, 0x61, 0x73, 0x65, 0x64, 0x20, 0x6f, 0x6e,
-		0x20, 0x6c, 0x77, 0x49, 0x50, 0x20, 0x31, 0x2e, 0x34, 0x2e, 0x31, 0x0d,
-		0x0a
+		0x20, 0x6c, 0x77, 0x49, 0x50, 0x0d,	0x0a
 };
-static unsigned int http_server_len = 37;
+static unsigned int http_server_len = 31;
 
 /* "Content-type: text/html */
 static const unsigned char http_content_html[] = {
@@ -129,7 +142,14 @@ static const unsigned char http_content_js[] = {
 };
 static const unsigned int http_content_js_len = 33;
 
-#define ENTRY_LEN   12
+/* "Content-type: text/plain */
+static const unsigned char http_content_plain[] = {
+		0x43,0x6f,0x6e,0x74,0x65,0x6e,0x74,0x2d,0x74,0x79,0x70,0x65,0x3a,0x20,
+		0x74,0x65,0x78,0x74,0x2f,0x70,0x6c,0x61,0x69,0x6e,0x0d,0x0a,0x0d,0x0a
+};
+static const unsigned int http_content_plain_len = 28;
+
+#define ENTRY_LEN   16
 #define LIST_LEN    10
 
 typedef struct {
@@ -194,7 +214,7 @@ static inline int charProcess(char inChar){
 				break;
 			}
 			if(cntChar >= ENTRY_LEN) return CHARPROC_ERR_OWFL;
-			//todo: Maybe tolerate other chars like "_"
+			//possible extension: Maybe tolerate other chars like "_"
 			if( ((inChar >= '0') && (inChar <= '9'))
 					|| (inChar >= 'A' && inChar <= 'Z')
 					|| (inChar >= 'a' && inChar <= 'z')
@@ -242,7 +262,7 @@ static inline int charProcess(char inChar){
 				break;
 			}
 			if(cntChar >= ENTRY_LEN) return CHARPROC_ERR_OWFL;
-			//todo: Maybe tolerate other chars like "_"
+			//possible extension:  Maybe tolerate other chars like "_"
 			if( ((inChar >= '0') && (inChar <= '9'))
 					|| (inChar >= 'A' && inChar <= 'Z')
 					|| (inChar >= 'a' && inChar <= 'z')
@@ -300,16 +320,6 @@ static void queryShow(struct netconn *conn){
 	netconn_write(conn, line, strlen(line), NETCONN_COPY);
 }
 
-static float p1234val;
-static void queryDecode(void){
-	int i;
-	for(i=0;i<cntElements;i++){
-		//Decode value for query string element "1234.3"
-		if(strncmp(queryList[i].name, "1234.3", ENTRY_LEN) == 0){
-			p1234val = strtof(queryList[i].value, NULL);
-		}
-	}
-}
 
 static inline void webpageProcess(struct netconn *conn){
 
@@ -355,13 +365,6 @@ static inline void webpageProcess(struct netconn *conn){
 		netconn_write(conn, http_content_html, http_content_html_len, NETCONN_NOCOPY);
 		netconn_write(conn, htdocs_testform_begin_htm, htdocs_testform_begin_htm_len, NETCONN_NOCOPY);
 		queryShow(conn);
-		//queryDecode();
-		//char xxcnt[100];
-		//MAY USE MALLOC!!!
-		//sprintf(xxcnt, "%f\n", p1234val);
-		//snprintf ( xxcnt, 100, "%f\n", p1234val );
-		//ftoa_own(xxcnt, p1234val);
-		//netconn_write(conn, xxcnt, strlen(xxcnt), NETCONN_COPY);
 		netconn_write(conn, htdocs_testform_end_htm, htdocs_testform_end_htm_len, NETCONN_NOCOPY);
 	}
 	else if(strncmp(filename, "test.json", ENTRY_LEN) == 0)
@@ -374,8 +377,8 @@ static inline void webpageProcess(struct netconn *conn){
 		arrayProcess(conn);
 		char *end_json_array = "]\n}";
 		netconn_write(conn, end_json_array, strlen(end_json_array), NETCONN_NOCOPY);
-
 	}
+	//  favicon.ico might be automatically fetched by some browsers, e.g. firefox
 	//	else if(strncmp(filename, "favicon.png", ENTRY_LEN) == 0)
 	//	{
 	//		netconn_write(conn, http_200ok, http_200ok_len, NETCONN_NOCOPY);
@@ -391,7 +394,14 @@ static inline void webpageProcess(struct netconn *conn){
 		netconn_write(conn, http_content_html, http_content_html_len, NETCONN_NOCOPY);
 		netconn_write(conn, htdocs_err404_htm, htdocs_err404_htm_len, NETCONN_NOCOPY);
 	}
+}
 
+static inline void webpageBadProcess(struct netconn *conn){
+	netconn_write(conn, http_400bad, http_400bad_len, NETCONN_NOCOPY);
+	netconn_write(conn, http_server, http_server_len, NETCONN_NOCOPY);
+	//improve: Add some html info
+	netconn_write(conn, http_content_plain, http_content_plain_len, NETCONN_NOCOPY);
+	netconn_write(conn, "ERR\n", 4, NETCONN_NOCOPY);
 }
 
 static void serve_get_request(struct netconn *conn)
@@ -427,7 +437,7 @@ static void serve_get_request(struct netconn *conn)
 
 						if(ret < 0) {
 							//Error!
-							//todo: Also Process Webpage (with error code)
+							webpageBadProcess(conn);
 							doexit = 4;
 							break;
 						};
@@ -491,14 +501,15 @@ static void edyht_thread(void *arg)
 		}
 		else
 		{
-			//todo: Notify error!
+			//improvement: Notify error!
 			netconn_delete(newconn);
 		}
 	}
 	else
 	{
-		//todo: Notify error!
+		//improvement: Notify error!
 	}
+	for(;;); //send thread to endless loop; should not happen!
 }
 
 void edyht_init()
